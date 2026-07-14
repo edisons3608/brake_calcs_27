@@ -5,11 +5,11 @@
 
 % Constants
 mass = 21.135;                 % slugs
-f_mass_dist = 0.48;         % percentage of mass on front axle at rest
+f_mass_dist = 0.5;         % percentage of mass on front axle at rest
 cog_height = 12.8;         % inches
 wheelbase = 60.25;             % inches
 tire_radius = 8;            % inches
-pedal_ratio = 8;          % mechanical advantage of pedal over master cylinder - worst case can change. 
+pedal_ratio = 4.9;          % mechanical advantage of pedal over master cylinder - worst case can change. 
 f_pad_cof = 0.42;           % est. front pad frictional coefficient on stainless steel while warm-ish (EBC)
 r_pad_cof = 0.42;           % est. rear pad frictional coefficient on stainless steel while warm-ish (Wilwood)
 panic_force = 450;          % lbs
@@ -17,7 +17,7 @@ f_rotor_radius = 3.0825;      % inches, measuring to center of rotor swept heigh
 r_rotor_radius = 2.9635;     % inches, measuring to center of rotor swept height, og value was 2.955
 pedal_efficiency = 0.85;    % percentage efficiency of brake pedal [very arbitrary]
 downforce_f_dist = 0.45;    % percentage of downforce on front axle
-f_bias = 0.4824;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
+f_bias = 0.526;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
 downforce_coef = 0.08589;   % downforce coefficient
 max_speed = 60;             % mph (not top speed of car, but fastest speed at which data is being analyzed)
 
@@ -30,7 +30,7 @@ r_fx = 0;                   % preallocation
 % Hydraulic specs
 f_piston_area = 2.454;      % square inches, for Wilwood GP200 [front calipers] (changed?)
 r_piston_area = 2.454;      % square inches, for Wilwood GP200 [rear calipers]
-f_master_cyl_area = 0.3068;   % square inches, Tilton 78-series value used (NFR24), possible from Tilton 78-series is 5/8"=.3068,7/10"=.38485,3/4"=.4418,13/16"=.5185,7/8"=.6013,15/16"=.6903,1"=.7854
+f_master_cyl_area = 0.3849;   % square inches, Tilton 78-series value used (NFR24), possible from Tilton 78-series is 5/8"=.3068,7/10"=.38485,3/4"=.4418,13/16"=.5185,7/8"=.6013,15/16"=.6903,1"=.7854
 r_master_cyl_area = 0.7854;   % square inches, Tilton 78-series value used (NFR24)
 
 
