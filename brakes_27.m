@@ -75,6 +75,197 @@ fprintf("rear axle weight 30mph = %.2f lbs\nrear axle weight 60mph = %.2f lbs\n"
 
 
 
+% Calculating maximum deceleration at different speeds via nonlinear system
+% of equations using fsolve
+fprintf("\ncalculating traction-limited max. decels...\n");
+
+% Preallocate decels array
+decels = zeros(1, N);
+
+% Set options for fsolve
+options = optimoptions('fsolve', 'Display', 'off');
+
+for i = 1:N
+    % Extract parameters for current time step
+    fn_f_axle_i = fn_f_axle(i);
+    fn_r_axle_i = fn_r_axle(i);
+
+    % Initial guess for variables [a, fzf, fzr, fxf, fxr]
+    x0 = [0; fn_f_axle_i; fn_r_axle_i; 0; 0];
+
+    % Define the system function with current parameters
+    systemFunc = @(x) mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i);
+
+    % Solve the system of equations
+    [x_sol, fval, exitflag] = fsolve(systemFunc, x0, options);
+
+    % Check if fsolve converged
+    if exitflag <= 0
+        warning('fsolve did not converge at iteration %d.', i);
+        decels(i) = NaN; % Assign NaN or handle as needed
+    else
+        decels(i) = x_sol(1); % Extract deceleration (a)
+    end
+end
+
+fprintf("\ntraction-limited max decel from 30mph = %.4f ft/s^2\ntraction-limited max decel from 60mph = %.4f ft/s^2\n", decels(301), decels(601));
+decels_init = decels;
+
+%% PEDALS-LIMITED BRAKING CASE
+
+j = 1;  % number of loops executed
+while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
+    if j > 1    % every loop after the first
+        decels = decels_actual; % Update decels for next iteration
+    end
+    for i = 1:N  % all decels
+        % Calculating axle weights and corresponding max. axle longitudinal forces
+        wt(i) = mass * decels(i) * (cog_height / wheelbase);
+        fx_f_braking(i) = 1.7*(fn_f_axle(i) + wt(i)) - (0.0008*(fn_f_axle(i) + wt(i))^2);
+        fx_r_braking(i) = 1.7*(fn_r_axle(i) - wt(i)) - (0.0008*(fn_r_axle(i) - wt(i))^2); 
+
+        % Calculating PSIs required for max decels at different speeds
+        fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi %%%%%%fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi
+        rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof); % psi %%%%%%rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof); % psi
+
+        % Calculating pedal forces required for max decels
+        f_pedal_force(i) = (((fpsi(i) * f_master_cyl_area) / pedal_ratio) / pedal_efficiency) / f_bias; % lbf
+        r_pedal_force(i) = (((rpsi(i) * r_master_cyl_area) / pedal_ratio) / pedal_efficiency) / (1 - f_bias);
+
+        if j == 1
+            f_pedal_force_init(i) = f_pedal_force(i);
+            r_pedal_force_init(i) = r_pedal_force(i);
+        end
+
+        % Identifying lowest pedal force required to lock either axle
+        if f_pedal_force(i) < r_pedal_force(i)
+            r_pedal_force(i) = f_pedal_force(i);
+            f_fx = (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            % decels_actual(i) = (fx_f_braking(i) + f_fx + r_fx) / mass;
+            %fprintf("first loop\n");
+        else
+            f_pedal_force(i) = r_pedal_force(i);
+            f_fx = (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            % decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
+            %fprintf("second loop\n");
+        end
+        decels_actual(i) = (f_fx + r_fx) / mass;
+    end
+    fprintf("\nloop complete. number of loops so far: %d", j);
+    fprintf("\ninitial 60mph decel: %.4f ft/s^2\nnew 60mph decel: %.4f ft/s^2\n", decels(N), decels_actual(N));
+
+    j = j + 1;
+end
+
+for i = 1:N
+    lowest_pedal_force(i) = min(f_pedal_force_init(i), r_pedal_force_init(i));
+end
+decels = decels_init;
+%% PLOTS
+
+%%
+% figure
+% plot((0:N-1)/10, lowest_pedal_force(1:N))
+% legend("Pedal Force")
+% xlabel("Speed (mph)")
+% ylabel("Pedal Force (lbs)")
+% title("Max Pedal Force vs. Speed")
+
+figure
+plot((0:N-1)/10, lowest_pedal_force(1:N))
+legend("Pedal Force")
+xlabel("Speed (mph)")
+ylabel("Pedal Force (lbs)")
+title("Max Pedal Force vs. Speed")
+
+% Plotting pedal force at threshold braking vs. deceleration at different speeds
+figure
+plot(decels(1:N), f_pedal_force(1:N))
+legend("Pedal Force")
+xlabel("deceleration ft/ss")
+ylabel("Pedal Force (lbs)")
+title("Threshold Pedal Force vs. Deceleration")
+
+% Plotting actual maximum deceleration at different speeds
+figure
+plot((0:N-1)/10, decels)
+legend("Deceleration")
+xlabel("Speed (mph)")
+ylabel("Deceleration (ft/s^2)")
+title("Max Pedal-Limited Deceleration at Different Speeds")
+
+% Calculates panic force hydraulic pressures
+f_panic_pressure = panic_force * pedal_efficiency * pedal_ratio * f_bias / f_master_cyl_area;
+r_panic_pressure = panic_force * pedal_efficiency * pedal_ratio * (1 - f_bias) / r_master_cyl_area;
+fprintf("\nfront panic pressure = %.2f psi\nrear panic pressure = %.2f psi\n", f_panic_pressure, r_panic_pressure);
+
+% Determining difference between front and rear pedal forces under threshold braking
+if r_pedal_force_init(1) > f_pedal_force_init(1)
+    fprintf("Required rear pedal force is always higher than front\n");
+elseif r_pedal_force_init(N) <= f_pedal_force_init(N)
+    fprintf("WARNING: Rear pedal force lower than fronts for all speeds\n");
+else
+    for i = 2:N
+        if r_pedal_force_init(i) > f_pedal_force_init(i)
+            fprintf("Required rear pedal force higher than front starting at %.1f mph\n", (i-1)/10);
+            break; 
+        end
+    end
+end
+
+% Plotting front and rear pedal force at maximum deceleration vs. speed
+figure
+plot((0:N-1)/10, f_pedal_force_init(1:N), (0:N-1)/10, r_pedal_force_init(1:N))
+legend("Front Pedal Force","Rear Pedal Force")
+xlabel("Speed (mph)")
+ylabel("Pedal Force (lbs)")  
+title("Front/Rear Pedal Force Delta at Different Speeds")
+
+% %% TIME CALCULATIONS FOR THERMAL SIMULATIONS
+% 
+% % Calculating the amount of time it takes to decelerate from maximum speed
+% time = 0;
+% decels_actual_metric = decels_actual * 0.3048;    % Convert decelerations to m/s^2
+% vnew = max_speed * 0.44704;   % Convert mph to m/s
+% tdelt = 0.0001;    % Time step 
+% while vnew > 0  % Continues as long as the speed is greater than 0
+%     vold = vnew;
+% 
+%     % Finding index of corresponding acceleration value at that given speed
+%     accel_ind = round(vold / 0.44704 * 10) + 1;
+%     if accel_ind < 1 || accel_ind > N
+%         break;
+%     end
+% 
+%     % Determining change in velocity by calling corresponding value from decels vector
+%     a = decels_actual_metric(accel_ind) * tdelt;
+%     vnew = vold - a;
+%     time = time + tdelt;
+% 
+% end
+% fprintf("\nFastest possible time to decelerate from %.0f mph to 0 mph: %.4f s\n", max_speed, time);
+
+
+% System of equations function for fsolve
+function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i)
+    % Unpack variables
+    a   = x(1);  % Deceleration
+    fzf = x(2);  % Front normal force
+    fzr = x(3);  % Rear normal force
+    fxf = x(4);  % Front longitudinal force
+    fxr = x(5);  % Rear longitudinal force
+
+    % Equations
+    F = zeros(5,1);
+    F(1) = (fxf + fxr) / mass - a;    % Equation 1: Newton's second law
+    F(2) = 1.7 * fzf - 0.0008 * fzf^2 - fxf;  % Equation 2: Front tire force
+    F(3) = 1.7 * fzr - 0.0008 * fzr^2 - fxr;  % Equation 3: Rear tire force
+    F(4) = fn_f_axle_i + (mass * a * (cog_height / wheelbase)) - fzf;  % Equation 4: Front normal force
+    F(5) = fn_r_axle_i - (mass * a * (cog_height / wheelbase)) - fzr;  % Equation 5: Rear normal force
+end
+
 % Aerodynamic forces function
 function [df] = aero_forces(v)
     % aero_forces: calculates the front and rear downforce on the car axles 
@@ -100,3 +291,4 @@ function [df] = aero_forces(v)
 
     df = [front_df, rear_df];
 end
+
