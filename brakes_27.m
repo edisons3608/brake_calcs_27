@@ -140,14 +140,14 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         % Identifying lowest pedal force required to lock either axle
         if f_pedal_force(i) < r_pedal_force(i)
             r_pedal_force(i) = f_pedal_force(i);
-            f_fx = (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
             % decels_actual(i) = (fx_f_braking(i) + f_fx + r_fx) / mass;
             %fprintf("first loop\n");
         else
             f_pedal_force(i) = r_pedal_force(i);
-            f_fx = (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
             % decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
             %fprintf("second loop\n");
         end
@@ -163,6 +163,28 @@ for i = 1:N
     lowest_pedal_force(i) = min(f_pedal_force_init(i), r_pedal_force_init(i));
 end
 decels = decels_init;
+
+%% TIME-DOMAIN CALCULATIONS
+
+% Building a time vector t, where t(i) is the elapsed time (s) since the
+% start of a threshold-braking event from max_speed until the car has
+% slowed to the speed corresponding to index i, i.e. v(i) = (i-1)/10 mph.
+% t(N) = 0 (braking just started at max_speed); t(1) = total time to stop.
+t = zeros(1, N);
+mph_to_fps = 1.466667;              % conversion factor, mph -> ft/s
+dv_fps = step * mph_to_fps;         % constant speed increment in ft/s
+
+for i = N-1:-1:1
+    a_avg = (decels_actual(i) + decels_actual(i+1)) / 2;   % ft/s^2
+    if a_avg <= 0
+        t(i) = t(i+1);
+    else
+        t(i) = t(i+1) + dv_fps / a_avg;
+    end
+end
+
+fprintf("\ntotal time to decelerate from %.0f mph to 0 mph: %.4f s\n", max_speed, t(1));
+
 %% PLOTS
 
 %%
@@ -223,29 +245,38 @@ xlabel("Speed (mph)")
 ylabel("Pedal Force (lbs)")  
 title("Front/Rear Pedal Force Delta at Different Speeds")
 
-% %% TIME CALCULATIONS FOR THERMAL SIMULATIONS
-% 
-% % Calculating the amount of time it takes to decelerate from maximum speed
-% time = 0;
-% decels_actual_metric = decels_actual * 0.3048;    % Convert decelerations to m/s^2
-% vnew = max_speed * 0.44704;   % Convert mph to m/s
-% tdelt = 0.0001;    % Time step 
-% while vnew > 0  % Continues as long as the speed is greater than 0
-%     vold = vnew;
-% 
-%     % Finding index of corresponding acceleration value at that given speed
-%     accel_ind = round(vold / 0.44704 * 10) + 1;
-%     if accel_ind < 1 || accel_ind > N
-%         break;
-%     end
-% 
-%     % Determining change in velocity by calling corresponding value from decels vector
-%     a = decels_actual_metric(accel_ind) * tdelt;
-%     vnew = vold - a;
-%     time = time + tdelt;
-% 
-% end
-% fprintf("\nFastest possible time to decelerate from %.0f mph to 0 mph: %.4f s\n", max_speed, time);
+% Plotting front and rear circuit pressure vs. time elapsed during a
+% threshold-braking event from max_speed to 0
+figure
+plot(t(1:N), fpsi(1:N), t(1:N), rpsi(1:N))
+legend("Front PSI","Rear PSI")
+xlabel("Time (s)")
+ylabel("Pressure (psi)")
+title("Front/Rear Circuit Pressure vs. Time")
+
+%% TIME CALCULATIONS FOR THERMAL SIMULATIONS
+
+% Calculating the amount of time it takes to decelerate from maximum speed
+time = 0;
+decels_actual_metric = decels_actual * 0.3048;    % Convert decelerations to m/s^2
+vnew = max_speed * 0.44704;   % Convert mph to m/s
+tdelt = 0.0001;    % Time step 
+while vnew > 0  % Continues as long as the speed is greater than 0
+    vold = vnew;
+
+    % Finding index of corresponding acceleration value at that given speed
+    accel_ind = round(vold / 0.44704 * 10) + 1;
+    if accel_ind < 1 || accel_ind > N
+        break;
+    end
+
+    % Determining change in velocity by calling corresponding value from decels vector
+    a = decels_actual_metric(accel_ind) * tdelt;
+    vnew = vold - a;
+    time = time + tdelt;
+
+end
+fprintf("\nFastest possible time to decelerate from %.0f mph to 0 mph: %.4f s\n", max_speed, time);
 
 
 % System of equations function for fsolve
