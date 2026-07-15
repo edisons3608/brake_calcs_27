@@ -5,7 +5,7 @@
 
 % Constants
 mass = 21.135;                 % slugs
-f_mass_dist = 0.5;         % percentage of mass on front axle at rest
+f_mass_dist = 0.529;         % percentage of mass on front axle at rest
 cog_height = 12.8;         % inches
 wheelbase = 60.25;             % inches
 tire_radius = 8;            % inches
@@ -28,6 +28,8 @@ f_fx = 0;                   % preallocation
 r_fx = 0;                   % preallocation
 
 % Hydraulic specs
+
+% piston areas are per caliper
 f_piston_area = 2.454;      % square inches, for Wilwood GP200 [front calipers] (changed?)
 r_piston_area = 2.454;      % square inches, for Wilwood GP200 [rear calipers]
 f_master_cyl_area = 0.3849;   % square inches, Tilton 78-series value used (NFR24), possible from Tilton 78-series is 5/8"=.3068,7/10"=.38485,3/4"=.4418,13/16"=.5185,7/8"=.6013,15/16"=.6903,1"=.7854
