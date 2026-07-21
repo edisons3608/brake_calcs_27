@@ -1,5 +1,4 @@
-r.
-pth = "C:\Users\esun3\Downloads\Data-20260715T141503Z-1-001\Data\A2356run69.dat";
+pth = "C:\Users\esun3\Downloads\Data-20260715T141503Z-1-001\Data\A2356raw9.dat";
 
 data = readmatrix(pth, 'FileType', 'text', 'NumHeaderLines', 3);
 

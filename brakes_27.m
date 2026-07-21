@@ -62,6 +62,8 @@ decels_init = zeros(1,N);            % stores initial traction-limited decelerat
 pedal_force_delta = zeros(1,N);      % stores delta between front and rear pedal forces at max deceleration
 lowest_pedal_force = zeros(1,N);  
 
+a = 1.7;
+b = 0.0008;
 
 %% TRACTION-LIMITED BRAKING CASE
 
@@ -96,7 +98,7 @@ for i = 1:N
     x0 = [0; fn_f_axle_i; fn_r_axle_i; 0; 0];
 
     % Define the system function with current parameters
-    systemFunc = @(x) mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i);
+    systemFunc = @(x) mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i,a,b);
 
     % Solve the system of equations
     [x_sol, fval, exitflag] = fsolve(systemFunc, x0, options);
@@ -123,8 +125,8 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
     for i = 1:N  % all decels
         % Calculating axle weights and corresponding max. axle longitudinal forces
         wt(i) = mass * decels(i) * (cog_height / wheelbase);
-        fx_f_braking(i) = 1.7*(fn_f_axle(i) + wt(i)) - (0.0008*(fn_f_axle(i) + wt(i))^2);
-        fx_r_braking(i) = 1.7*(fn_r_axle(i) - wt(i)) - (0.0008*(fn_r_axle(i) - wt(i))^2); 
+        fx_f_braking(i) = a*(fn_f_axle(i) + wt(i)) - (b*(fn_f_axle(i) + wt(i))^2);
+        fx_r_braking(i) = a*(fn_r_axle(i) - wt(i)) - (b*(fn_r_axle(i) - wt(i))^2); 
 
         % Calculating PSIs required for max decels at different speeds
         fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi %%%%%%fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi
@@ -282,7 +284,7 @@ fprintf("\nFastest possible time to decelerate from %.0f mph to 0 mph: %.4f s\n"
 
 
 % System of equations function for fsolve
-function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i)
+function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i,a,b)
     % Unpack variables
     a   = x(1);  % Deceleration
     fzf = x(2);  % Front normal force
@@ -293,8 +295,8 @@ function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i)
     % Equations
     F = zeros(5,1);
     F(1) = (fxf + fxr) / mass - a;    % Equation 1: Newton's second law
-    F(2) = 1.7 * fzf - 0.0008 * fzf^2 - fxf;  % Equation 2: Front tire force
-    F(3) = 1.7 * fzr - 0.0008 * fzr^2 - fxr;  % Equation 3: Rear tire force
+    F(2) = a * fzf - b * fzf^2 - fxf;  % Equation 2: Front tire force
+    F(3) = a * fzr - b * fzr^2 - fxr;  % Equation 3: Rear tire force
     F(4) = fn_f_axle_i + (mass * a * (cog_height / wheelbase)) - fzf;  % Equation 4: Front normal force
     F(5) = fn_r_axle_i - (mass * a * (cog_height / wheelbase)) - fzr;  % Equation 5: Rear normal force
 end
