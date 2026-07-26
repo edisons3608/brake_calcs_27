@@ -13,8 +13,8 @@ pedal_ratio = 4.9;          % mechanical advantage of pedal over master cylinder
 f_pad_cof = 0.47;           % est. front pad frictional coefficient on stainless steel while warm-ish (EBC)
 r_pad_cof = 0.47;           % est. rear pad frictional coefficient on stainless steel while warm-ish (Wilwood)
 panic_force = 450;          % lbs
-f_rotor_radius = 3.0425;      % inches, measuring to center of rotor swept height, pad height is ~1.335, so to edge of rotor is f_rotor_radius+(0.5*1.335)=3.8365
-r_rotor_radius = 2.983;     % inches, measuring to center of rotor swept height, og value was 2.955
+f_rotor_radius = 3.4625;      % inches, measuring to center of rotor swept height, pad height is ~1.335, so to edge of rotor is f_rotor_radius+(0.5*1.335)=3.8365
+r_rotor_radius = 3.403;     % inches, measuring to center of rotor swept height, og value was 2.955
 pedal_efficiency = 0.85;    % percentage efficiency of brake pedal [very arbitrary]
 downforce_f_dist = 0.45;    % percentage of downforce on front axle
 f_bias = 0.5204;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
@@ -49,6 +49,8 @@ fn_r_axle = zeros(1,N);              % rear axle normal force at different speed
 decels = zeros(1,N);                 % theoretical max. decel. at different speeds (limited by traction)
 fpsi = zeros(1,N);                   % psi required in front circuit for max decel. at different speeds
 rpsi = zeros(1,N);                   % psi required in rear circuit for max decel. at different speeds
+fpsi_pedal = zeros(1,N);             % psi actually in front circuit in the pedal-limited case
+rpsi_pedal = zeros(1,N);             % psi actually in rear circuit in the pedal-limited case
 wt = zeros(1,N);                     % weight transfer forwards under max decel. at different speeds
 fx_f_braking = zeros(1,N);           % front axle longitudinal force under max decel. at different speeds
 fx_r_braking = zeros(1,N);           % rear axle longitudinal force under max decel. at different speeds
@@ -154,6 +156,14 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
             %decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
             %fprintf("second loop\n");
         end
+        % Circuit pressures actually reached in the pedal-limited case. The
+        % applied pedal force is the lower of the two axle-locking forces
+        % (both entries are equal to it after the min above), and that single
+        % force feeds both circuits through the bias bar.
+        applied_pedal_force = f_pedal_force(i);
+        fpsi_pedal(i) = applied_pedal_force * pedal_efficiency * pedal_ratio * f_bias / f_master_cyl_area;
+        rpsi_pedal(i) = applied_pedal_force * pedal_efficiency * pedal_ratio * (1 - f_bias) / r_master_cyl_area;
+
         decels_actual(i) = (f_fx + r_fx) / mass;
     end
     fprintf("\nloop complete. number of loops so far: %d", j);
@@ -250,14 +260,14 @@ xlabel("Speed (mph)")
 ylabel("Pedal Force (lbs)")  
 title("Front/Rear Pedal Force Delta at Different Speeds")
 
-% Plotting front and rear circuit pressure vs. time elapsed during a
-% threshold-braking event from max_speed to 0
+% Plotting front and rear circuit pressure vs. speed during a
+% pedal-limited braking event from max_speed to 0
 figure
-plot(t(1:N), fpsi(1:N), t(1:N), rpsi(1:N))
+plot((0:N-1)/10, fpsi_pedal(1:N), (0:N-1)/10, rpsi_pedal(1:N))
 legend("Front PSI","Rear PSI")
-xlabel("Time (s)")
+xlabel("Speed (mph)")
 ylabel("Pressure (psi)")
-title("Front/Rear Circuit Pressure vs. Time")
+title("Front/Rear Circuit Pressure vs. Speed (Pedal-Limited)")
 
 %% TIME CALCULATIONS FOR THERMAL SIMULATIONS
 
