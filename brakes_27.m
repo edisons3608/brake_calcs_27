@@ -3,9 +3,8 @@
 
 % Init constants
 
-% Constants
 mass = 21.135;                 % slugs
-f_mass_dist = 0.529;         % percentage of mass on front axle at rest
+f_mass_dist = 0.48;         % percentage of mass on front axle at rest
 cog_height = 12.8;         % inches
 wheelbase = 60.25;             % inches
 tire_radius = 8;            % inches
@@ -13,8 +12,8 @@ pedal_ratio = 4.9;          % mechanical advantage of pedal over master cylinder
 f_pad_cof = 0.42;           % est. front pad frictional coefficient on stainless steel while warm-ish (EBC)
 r_pad_cof = 0.42;           % est. rear pad frictional coefficient on stainless steel while warm-ish (Wilwood)
 panic_force = 450;          % lbs
-f_rotor_radius = 3.0825;      % inches, measuring to center of rotor swept height, pad height is ~1.335, so to edge of rotor is f_rotor_radius+(0.5*1.335)=3.8365
-r_rotor_radius = 2.9635;     % inches, measuring to center of rotor swept height, og value was 2.955
+f_rotor_radius = 3.0425;      % inches, measuring to center of rotor swept height, pad height is ~1.335, so to edge of rotor is f_rotor_radius+(0.5*1.335)=3.8365
+r_rotor_radius = 2.983;     % inches, measuring to center of rotor swept height, og value was 2.955
 pedal_efficiency = 0.85;    % percentage efficiency of brake pedal [very arbitrary]
 downforce_f_dist = 0.45;    % percentage of downforce on front axle
 f_bias = 0.526;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
@@ -129,8 +128,8 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         fx_r_braking(i) = a*(fn_r_axle(i) - wt(i)) - (b*(fn_r_axle(i) - wt(i))^2); 
 
         % Calculating PSIs required for max decels at different speeds
-        fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi %%%%%%fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi
-        rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof); % psi %%%%%%rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof); % psi
+        fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (f_piston_area * f_pad_cof); % psi
+        rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (r_piston_area * r_pad_cof); % psi
 
         % Calculating pedal forces required for max decels
         f_pedal_force(i) = (((fpsi(i) * f_master_cyl_area) / pedal_ratio) / pedal_efficiency) / f_bias; % lbf
@@ -144,15 +143,15 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         % Identifying lowest pedal force required to lock either axle
         if f_pedal_force(i) < r_pedal_force(i)
             r_pedal_force(i) = f_pedal_force(i);
-            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
-            % decels_actual(i) = (fx_f_braking(i) + f_fx + r_fx) / mass;
+            f_fx = 2 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 2 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            %decels_actual(i) = (fx_f_braking(i) + f_fx + r_fx) / mass;
             %fprintf("first loop\n");
         else
             f_pedal_force(i) = r_pedal_force(i);
-            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
-            % decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
+            f_fx = 2 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 2 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            %decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
             %fprintf("second loop\n");
         end
         decels_actual(i) = (f_fx + r_fx) / mass;
@@ -167,6 +166,8 @@ for i = 1:N
     lowest_pedal_force(i) = min(f_pedal_force_init(i), r_pedal_force_init(i));
 end
 decels = decels_init;
+
+actual_front_brake_bias = f_fx / (f_fx + r_fx);
 
 %% TIME-DOMAIN CALCULATIONS
 
@@ -275,8 +276,8 @@ while vnew > 0  % Continues as long as the speed is greater than 0
     end
 
     % Determining change in velocity by calling corresponding value from decels vector
-    a = decels_actual_metric(accel_ind) * tdelt;
-    vnew = vold - a;
+    dv = decels_actual_metric(accel_ind) * tdelt;
+    vnew = vold - dv;
     time = time + tdelt;
 
 end
@@ -286,7 +287,7 @@ fprintf("\nFastest possible time to decelerate from %.0f mph to 0 mph: %.4f s\n"
 % System of equations function for fsolve
 function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i,a,b)
     % Unpack variables
-    a   = x(1);  % Deceleration
+    decel = x(1);  % Deceleration
     fzf = x(2);  % Front normal force
     fzr = x(3);  % Rear normal force
     fxf = x(4);  % Front longitudinal force
@@ -294,11 +295,11 @@ function F = mySystem(x, mass, cog_height, wheelbase, fn_f_axle_i, fn_r_axle_i,a
 
     % Equations
     F = zeros(5,1);
-    F(1) = (fxf + fxr) / mass - a;    % Equation 1: Newton's second law
+    F(1) = (fxf + fxr) / mass - decel;    % Equation 1: Newton's second law
     F(2) = a * fzf - b * fzf^2 - fxf;  % Equation 2: Front tire force
     F(3) = a * fzr - b * fzr^2 - fxr;  % Equation 3: Rear tire force
-    F(4) = fn_f_axle_i + (mass * a * (cog_height / wheelbase)) - fzf;  % Equation 4: Front normal force
-    F(5) = fn_r_axle_i - (mass * a * (cog_height / wheelbase)) - fzr;  % Equation 5: Rear normal force
+    F(4) = fn_f_axle_i + (mass * decel * (cog_height / wheelbase)) - fzf;  % Equation 4: Front normal force
+    F(5) = fn_r_axle_i - (mass * decel * (cog_height / wheelbase)) - fzr;  % Equation 5: Rear normal force
 end
 
 % Aerodynamic forces function
