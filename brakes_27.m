@@ -21,8 +21,17 @@ f_bias = 0.5204;              % percentage of driver force that goes to front ax
 downforce_coef = 0.08589;   % downforce coefficient
 max_speed = 60;             % mph (not top speed of car, but fastest speed at which data is being analyzed)
 
-% regen_torque = 70;          % lbs-ft; assumed constant regen torque at motor
-% axle_regen_long_force = (75 / (tire_radius / 12)) / 2;  % lbs
+% Regen specs - 4x DTI F-SiC hub motors, one per wheel (AWD), so regen is
+% available at both axles. Simple model: constant continuous torque at all
+% speeds, no corner-speed taper and no regen power cap.
+regen_torque_motor = 11.1;  % Nm, continuous regen torque per motor
+gear_ratio = 11;            % planetary reduction, motor -> wheel
+n_motors = 4;               % total motors, one per wheel
+regen_f_dist = 0.26;        % fraction of regen torque at the front axle (26/74 front/rear, per drivetrain torque split)
+
+% Constant total regen force at the contact patches, speed-independent
+regen_force_total = n_motors * regen_torque_motor * gear_ratio ...
+    / (tire_radius * 0.0254) * 0.224809;    % lbf
 
 f_fx = 0;                   % preallocation
 r_fx = 0;                   % preallocation
@@ -51,6 +60,16 @@ fpsi = zeros(1,N);                   % psi required in front circuit for max dec
 rpsi = zeros(1,N);                   % psi required in rear circuit for max decel. at different speeds
 fpsi_pedal = zeros(1,N);             % psi actually in front circuit in the pedal-limited case
 rpsi_pedal = zeros(1,N);             % psi actually in rear circuit in the pedal-limited case
+regen_avail = zeros(1,N);            % total regen force available (torque- and power-capped) at different speeds
+regen_f = zeros(1,N);                % regen force at front axle after traction scaling
+regen_r = zeros(1,N);                % regen force at rear axle after traction scaling
+fx_f_fric = zeros(1,N);              % front axle force the friction brakes must supply with regen active
+fx_r_fric = zeros(1,N);              % rear axle force the friction brakes must supply with regen active
+fpsi_regen = zeros(1,N);             % front circuit psi required at max decel. with regen active
+rpsi_regen = zeros(1,N);             % rear circuit psi required at max decel. with regen active
+f_pedal_force_regen = zeros(1,N);    % front pedal force required at max decel. with regen active
+r_pedal_force_regen = zeros(1,N);    % rear pedal force required at max decel. with regen active
+lowest_pedal_force_regen = zeros(1,N); % applied pedal force at max decel. with regen active
 wt = zeros(1,N);                     % weight transfer forwards under max decel. at different speeds
 fx_f_braking = zeros(1,N);           % front axle longitudinal force under max decel. at different speeds
 fx_r_braking = zeros(1,N);           % rear axle longitudinal force under max decel. at different speeds
@@ -141,6 +160,34 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
             f_pedal_force_init(i) = f_pedal_force(i);
             r_pedal_force_init(i) = r_pedal_force(i);
         end
+
+        % REGEN-BLENDED CASE. Regen cannot raise the traction ceiling, so the
+        % target axle forces are still fx_f_braking/fx_r_braking. What regen
+        % changes is how much of that the friction brakes have to supply, and
+        % therefore the pedal force needed to reach the traction limit.
+        regen_avail(i) = regen_force_total;
+
+        % Split by the drivetrain torque distribution, then scale the total down
+        % so neither axle is asked for more than its traction allows (a fixed
+        % split means the grip-limited axle governs the whole regen command).
+        regen_scale = 1;
+        if regen_avail(i) * regen_f_dist > fx_f_braking(i)
+            regen_scale = min(regen_scale, fx_f_braking(i) / (regen_avail(i) * regen_f_dist));
+        end
+        if regen_avail(i) * (1 - regen_f_dist) > fx_r_braking(i)
+            regen_scale = min(regen_scale, fx_r_braking(i) / (regen_avail(i) * (1 - regen_f_dist)));
+        end
+        regen_f(i) = regen_avail(i) * regen_f_dist * regen_scale;
+        regen_r(i) = regen_avail(i) * (1 - regen_f_dist) * regen_scale;
+
+        % Friction brakes cover the remainder, and the pedal forces follow
+        fx_f_fric(i) = max(0, fx_f_braking(i) - regen_f(i));
+        fx_r_fric(i) = max(0, fx_r_braking(i) - regen_r(i));
+        fpsi_regen(i) = ((fx_f_fric(i) / 2) * (tire_radius / f_rotor_radius)) / (f_piston_area * f_pad_cof);
+        rpsi_regen(i) = ((fx_r_fric(i) / 2) * (tire_radius / r_rotor_radius)) / (r_piston_area * r_pad_cof);
+        f_pedal_force_regen(i) = (((fpsi_regen(i) * f_master_cyl_area) / pedal_ratio) / pedal_efficiency) / f_bias;
+        r_pedal_force_regen(i) = (((rpsi_regen(i) * r_master_cyl_area) / pedal_ratio) / pedal_efficiency) / (1 - f_bias);
+        lowest_pedal_force_regen(i) = min(f_pedal_force_regen(i), r_pedal_force_regen(i));
 
         % Identifying lowest pedal force required to lock either axle
         if f_pedal_force(i) < r_pedal_force(i)
@@ -259,6 +306,23 @@ legend("Front Pedal Force","Rear Pedal Force")
 xlabel("Speed (mph)")
 ylabel("Pedal Force (lbs)")  
 title("Front/Rear Pedal Force Delta at Different Speeds")
+
+% Plotting applied pedal force to reach the traction limit, with and without
+% regen, to show how much pedal effort the regen blend removes
+figure
+plot((0:N-1)/10, lowest_pedal_force(1:N), (0:N-1)/10, lowest_pedal_force_regen(1:N))
+legend("Friction Only","With Regen")
+xlabel("Speed (mph)")
+ylabel("Pedal Force (lbs)")
+title("Pedal Force to Reach Traction Limit - Regen vs. Friction Only")
+
+% Plotting regen force actually usable at each axle after traction capping
+figure
+plot((0:N-1)/10, regen_avail(1:N), (0:N-1)/10, regen_f(1:N), (0:N-1)/10, regen_r(1:N))
+legend("Regen Available (uncapped)","Front Axle Regen","Rear Axle Regen")
+xlabel("Speed (mph)")
+ylabel("Longitudinal Force (lbs)")
+title("Regen Force Available vs. Usable After Traction Limit")
 
 % Plotting front and rear circuit pressure vs. speed during a
 % pedal-limited braking event from max_speed to 0
