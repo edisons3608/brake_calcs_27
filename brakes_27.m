@@ -17,7 +17,7 @@ f_rotor_radius = 3.4625;      % inches, measuring to center of rotor swept heigh
 r_rotor_radius = 3.403;     % inches, measuring to center of rotor swept height, og value was 2.955
 pedal_efficiency = 0.85;    % percentage efficiency of brake pedal [very arbitrary]
 downforce_f_dist = 0.45;    % percentage of downforce on front axle
-f_bias = 0.5204;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
+f_bias = 0.521;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
 downforce_coef = 0.08589;   % downforce coefficient
 max_speed = 60;             % mph (not top speed of car, but fastest speed at which data is being analyzed)
 
@@ -27,7 +27,13 @@ max_speed = 60;             % mph (not top speed of car, but fastest speed at wh
 regen_torque_motor = 11.1;  % Nm, continuous regen torque per motor
 gear_ratio = 11;            % planetary reduction, motor -> wheel
 n_motors = 4;               % total motors, one per wheel
-regen_f_dist = 0.26;        % fraction of regen torque at the front axle (26/74 front/rear, per drivetrain torque split)
+% NOTE: 0.26/0.74 front/rear is the DRIVE (acceleration) torque split, not a
+% braking split - the 4 independent hub motors don't have to command the same
+% ratio in regen. Braking transfers weight forward (front axle carries more
+% load and more available traction than rear), so regen here is assumed
+% front-biased - mirrored from the drive split as a placeholder assumption
+% until an actual braking-specific split is defined.
+regen_f_dist_braking = 0.74;   % fraction of regen torque at the front axle while braking
 
 % Constant total regen force at the contact patches, speed-independent
 regen_force_total = n_motors * regen_torque_motor * gear_ratio ...
@@ -167,18 +173,18 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         % therefore the pedal force needed to reach the traction limit.
         regen_avail(i) = regen_force_total;
 
-        % Split by the drivetrain torque distribution, then scale the total down
-        % so neither axle is asked for more than its traction allows (a fixed
-        % split means the grip-limited axle governs the whole regen command).
+        % Split front-biased for braking (regen_f_dist_braking), then scale the
+        % total down so neither axle is asked for more than its traction allows
+        % (a fixed split means the grip-limited axle governs the whole regen command).
         regen_scale = 1;
-        if regen_avail(i) * regen_f_dist > fx_f_braking(i)
-            regen_scale = min(regen_scale, fx_f_braking(i) / (regen_avail(i) * regen_f_dist));
+        if regen_avail(i) * regen_f_dist_braking > fx_f_braking(i)
+            regen_scale = min(regen_scale, fx_f_braking(i) / (regen_avail(i) * regen_f_dist_braking));
         end
-        if regen_avail(i) * (1 - regen_f_dist) > fx_r_braking(i)
-            regen_scale = min(regen_scale, fx_r_braking(i) / (regen_avail(i) * (1 - regen_f_dist)));
+        if regen_avail(i) * (1 - regen_f_dist_braking) > fx_r_braking(i)
+            regen_scale = min(regen_scale, fx_r_braking(i) / (regen_avail(i) * (1 - regen_f_dist_braking)));
         end
-        regen_f(i) = regen_avail(i) * regen_f_dist * regen_scale;
-        regen_r(i) = regen_avail(i) * (1 - regen_f_dist) * regen_scale;
+        regen_f(i) = regen_avail(i) * regen_f_dist_braking * regen_scale;
+        regen_r(i) = regen_avail(i) * (1 - regen_f_dist_braking) * regen_scale;
 
         % Friction brakes cover the remainder, and the pedal forces follow
         fx_f_fric(i) = max(0, fx_f_braking(i) - regen_f(i));
