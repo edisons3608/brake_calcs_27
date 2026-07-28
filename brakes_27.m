@@ -86,7 +86,8 @@ r_pedal_force_init = zeros(1,N);     % rear pedal force after initial traction-l
 decels_actual = zeros(1,N);          % "actual" max. decel. at different speeds given both traction and pedal force limitations
 decels_init = zeros(1,N);            % stores initial traction-limited decelerations
 pedal_force_delta = zeros(1,N);      % stores delta between front and rear pedal forces at max deceleration
-lowest_pedal_force = zeros(1,N);  
+lowest_pedal_force = zeros(1,N);
+actual_front_brake_bias = zeros(1,N); % actual delivered front-axle share of total braking force (pedal-limited case), at different speeds
 
 a = 1.7;
 b = 0.0008;
@@ -218,6 +219,12 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         rpsi_pedal(i) = applied_pedal_force * pedal_efficiency * pedal_ratio * (1 - f_bias) / r_master_cyl_area;
 
         decels_actual(i) = (f_fx + r_fx) / mass;
+
+        % Actual delivered front-axle share of total braking force in the
+        % pedal-limited case, i.e. what fraction of real longitudinal force
+        % lands at the front tires once the applied pedal force (limited by
+        % whichever axle locks first) is fed through both circuits.
+        actual_front_brake_bias(i) = f_fx / (f_fx + r_fx);
     end
     fprintf("\nloop complete. number of loops so far: %d", j);
     fprintf("\ninitial 60mph decel: %.4f ft/s^2\nnew 60mph decel: %.4f ft/s^2\n", decels(N), decels_actual(N));
@@ -230,7 +237,9 @@ for i = 1:N
 end
 decels = decels_init;
 
-actual_front_brake_bias = f_fx / (f_fx + r_fx);
+fprintf("\nnominal (pedal/hydraulic) front bias = %.1f%%\n", f_bias * 100);
+fprintf("actual delivered front brake bias at 30mph = %.1f%%\nactual delivered front brake bias at 60mph = %.1f%%\n", ...
+    actual_front_brake_bias(301) * 100, actual_front_brake_bias(N) * 100);
 
 %% TIME-DOMAIN CALCULATIONS
 
@@ -305,13 +314,105 @@ else
     end
 end
 
-% Plotting front and rear pedal force at maximum deceleration vs. speed
-figure
-plot((0:N-1)/10, f_pedal_force_init(1:N), (0:N-1)/10, r_pedal_force_init(1:N))
-legend("Front Pedal Force","Rear Pedal Force")
-xlabel("Speed (mph)")
-ylabel("Pedal Force (lbs)")  
-title("Front/Rear Pedal Force Delta at Different Speeds")
+% Plotting front and rear pedal force at maximum deceleration vs. speed.
+% Whichever axle needs the LOWER force locks first and is what actually
+% governs the achievable braking event (solid); the higher-force axle
+% never actually reaches its own traction limit at that speed, since the
+% pedal can't be pushed past lockup on the other end (dotted). Shaded
+% background bands make the "who locks first" regions obvious at a glance.
+speed_vec = (0:N-1)/10;
+front_color = [0      0.4470 0.7410];
+rear_color  = [0.8500 0.3250 0.0980];
+
+front_governs = f_pedal_force_init(1:N) <= r_pedal_force_init(1:N);
+rear_governs  = ~front_governs;
+
+f_governing = f_pedal_force_init(1:N); f_governing(~front_governs) = NaN;
+f_excess    = f_pedal_force_init(1:N); f_excess(front_governs)     = NaN;
+r_governing = r_pedal_force_init(1:N); r_governing(~rear_governs)  = NaN;
+r_excess    = r_pedal_force_init(1:N); r_excess(rear_governs)      = NaN;
+
+% Convergence (crossover) speed and force, interpolated between grid points
+delta = f_pedal_force_init(1:N) - r_pedal_force_init(1:N);
+crossover_idx = find(diff(sign(delta)) ~= 0, 1);
+has_crossover = ~isempty(crossover_idx);
+if has_crossover
+    x1 = speed_vec(crossover_idx); x2 = speed_vec(crossover_idx+1);
+    y1 = delta(crossover_idx);     y2 = delta(crossover_idx+1);
+    crossover_speed = x1 - y1 * (x2 - x1) / (y2 - y1);
+    f1 = f_pedal_force_init(crossover_idx); f2 = f_pedal_force_init(crossover_idx+1);
+    crossover_force = f1 + (f2 - f1) * (crossover_speed - x1) / (x2 - x1);
+end
+
+ymax = max([f_pedal_force_init(1:N), r_pedal_force_init(1:N)]) * 1.12;
+
+figure('Position', [100 100 900 520], 'Color', 'w')
+hold on
+
+% Shaded bands showing which axle governs (locks first) over each speed range
+if has_crossover
+    if front_governs(1)
+        band1_color = front_color; band2_color = rear_color;
+        band1_label = "Front locks first"; band2_label = "Rear locks first";
+    else
+        band1_color = rear_color; band2_color = front_color;
+        band1_label = "Rear locks first"; band2_label = "Front locks first";
+    end
+    patch([0 crossover_speed crossover_speed 0], [0 0 ymax ymax], band1_color, ...
+        'FaceAlpha', 0.07, 'EdgeColor', 'none', 'HandleVisibility', 'off');
+    patch([crossover_speed max_speed max_speed crossover_speed], [0 0 ymax ymax], band2_color, ...
+        'FaceAlpha', 0.07, 'EdgeColor', 'none', 'HandleVisibility', 'off');
+    text(crossover_speed/2, ymax*0.96, band1_label, 'HorizontalAlignment', 'center', ...
+        'FontSize', 9, 'Color', band1_color*0.7, 'FontWeight', 'bold');
+    text(crossover_speed + (max_speed - crossover_speed)/2, ymax*0.96, band2_label, ...
+        'HorizontalAlignment', 'center', 'FontSize', 9, 'Color', band2_color*0.7, 'FontWeight', 'bold');
+end
+
+plot(speed_vec, f_governing, '-', 'Color', front_color, 'LineWidth', 2.0, 'DisplayName', 'Front Pedal Force')
+plot(speed_vec, f_excess, ':', 'Color', front_color, 'LineWidth', 1.5, 'HandleVisibility', 'off')
+plot(speed_vec, r_governing, '-', 'Color', rear_color, 'LineWidth', 2.0, 'DisplayName', 'Rear Pedal Force')
+plot(speed_vec, r_excess, ':', 'Color', rear_color, 'LineWidth', 1.5, 'HandleVisibility', 'off')
+
+if has_crossover
+    xline(crossover_speed, 'k--', 'LineWidth', 1, 'HandleVisibility', 'off');
+    plot(crossover_speed, crossover_force, 'ko', 'MarkerFaceColor', 'k', 'MarkerSize', 6, 'HandleVisibility', 'off');
+    text(crossover_speed, crossover_force - ymax*0.06, ...
+        sprintf('  Convergence: %.1f mph, %.0f lbf', crossover_speed, crossover_force), ...
+        'FontSize', 9, 'FontWeight', 'bold', 'VerticalAlignment', 'top');
+end
+
+grid on
+box on
+set(gca, 'FontSize', 11, 'LineWidth', 1, 'GridAlpha', 0.15)
+xlim([0 max_speed])
+ylim([0 ymax])
+xlabel("Speed (mph)", 'FontSize', 12, 'FontWeight', 'bold')
+ylabel("Pedal Force (lbf)", 'FontSize', 12, 'FontWeight', 'bold')
+title("Front/Rear Pedal Force Delta at Different Speeds", 'FontSize', 13, 'FontWeight', 'bold')
+subtitle("Solid = governs actual lockup at that speed  |  Dotted = other axle not yet reached", 'FontSize', 9.5)
+legend('Location', 'best', 'FontSize', 10, 'Box', 'off')
+hold off
+
+% Plotting the actual delivered front-axle brake bias (% of total real
+% longitudinal force landing at the front tires) vs. speed, alongside the
+% fixed nominal/hydraulic bias set by the bias bar, to show how much the
+% delivered split drifts from the nominal setting due to weight transfer
+% and whichever axle locks first at a given speed.
+figure('Position', [100 100 900 520], 'Color', 'w')
+hold on
+plot(speed_vec, actual_front_brake_bias(1:N) * 100, '-', 'Color', front_color, ...
+    'LineWidth', 2.0, 'DisplayName', 'Actual Front Brake Bias')
+yline(f_bias * 100, 'k--', 'LineWidth', 1, 'DisplayName', sprintf('Nominal Bias (%.1f%%)', f_bias * 100))
+grid on
+box on
+set(gca, 'FontSize', 11, 'LineWidth', 1, 'GridAlpha', 0.15)
+xlim([0 max_speed])
+xlabel("Speed (mph)", 'FontSize', 12, 'FontWeight', 'bold')
+ylabel("Front Brake Bias (%)", 'FontSize', 12, 'FontWeight', 'bold')
+title("Actual Delivered Front Brake Bias vs. Speed", 'FontSize', 13, 'FontWeight', 'bold')
+subtitle("Share of real longitudinal force landing at the front axle, pedal-limited case", 'FontSize', 9.5)
+legend('Location', 'best', 'FontSize', 10, 'Box', 'off')
+hold off
 
 % Plotting applied pedal force to reach the traction limit, with and without
 % regen, to show how much pedal effort the regen blend removes
