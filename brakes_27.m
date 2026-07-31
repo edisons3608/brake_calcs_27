@@ -24,7 +24,7 @@ max_speed = 60;             % mph (not top speed of car, but fastest speed at wh
 % Regen specs - 4x DTI F-SiC hub motors, one per wheel (AWD), so regen is
 % available at both axles. Simple model: constant continuous torque at all
 % speeds, no corner-speed taper and no regen power cap.
-regen_torque_motor = 11.1;  % Nm, continuous regen torque per motor
+regen_torque_motor = 5.1;  % Nm, continuous regen torque per motor
 gear_ratio = 11;            % planetary reduction, motor -> wheel
 n_motors = 4;               % total motors, one per wheel
 % NOTE: 0.26/0.74 front/rear is the DRIVE (acceleration) torque split, not a
@@ -156,8 +156,8 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         fx_r_braking(i) = a*(fn_r_axle(i) - wt(i)) - (b*(fn_r_axle(i) - wt(i))^2); 
 
         % Calculating PSIs required for max decels at different speeds
-        fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (f_piston_area * f_pad_cof); % psi
-        rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (r_piston_area * r_pad_cof); % psi
+        fpsi(i) = ((fx_f_braking(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof); % psi
+        rpsi(i) = ((fx_r_braking(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof); % psi
 
         % Calculating pedal forces required for max decels
         f_pedal_force(i) = (((fpsi(i) * f_master_cyl_area) / pedal_ratio) / pedal_efficiency) / f_bias; % lbf
@@ -190,8 +190,8 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         % Friction brakes cover the remainder, and the pedal forces follow
         fx_f_fric(i) = max(0, fx_f_braking(i) - regen_f(i));
         fx_r_fric(i) = max(0, fx_r_braking(i) - regen_r(i));
-        fpsi_regen(i) = ((fx_f_fric(i) / 2) * (tire_radius / f_rotor_radius)) / (f_piston_area * f_pad_cof);
-        rpsi_regen(i) = ((fx_r_fric(i) / 2) * (tire_radius / r_rotor_radius)) / (r_piston_area * r_pad_cof);
+        fpsi_regen(i) = ((fx_f_fric(i) / 2) * (tire_radius / f_rotor_radius)) / (2*f_piston_area * f_pad_cof);
+        rpsi_regen(i) = ((fx_r_fric(i) / 2) * (tire_radius / r_rotor_radius)) / (2*r_piston_area * r_pad_cof);
         f_pedal_force_regen(i) = (((fpsi_regen(i) * f_master_cyl_area) / pedal_ratio) / pedal_efficiency) / f_bias;
         r_pedal_force_regen(i) = (((rpsi_regen(i) * r_master_cyl_area) / pedal_ratio) / pedal_efficiency) / (1 - f_bias);
         lowest_pedal_force_regen(i) = min(f_pedal_force_regen(i), r_pedal_force_regen(i));
@@ -199,14 +199,14 @@ while abs(decels(N) - decels_actual(N)) > 0.0001   % will converge quickly
         % Identifying lowest pedal force required to lock either axle
         if f_pedal_force(i) < r_pedal_force(i)
             r_pedal_force(i) = f_pedal_force(i);
-            f_fx = 2 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = 2 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
             %decels_actual(i) = (fx_f_braking(i) + f_fx + r_fx) / mass;
             %fprintf("first loop\n");
         else
             f_pedal_force(i) = r_pedal_force(i);
-            f_fx = 2 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
-            r_fx = 2 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
+            f_fx = 4 * (f_pedal_force(i) * pedal_efficiency * pedal_ratio * (f_bias) * f_pad_cof * f_piston_area)/(f_master_cyl_area * (tire_radius / f_rotor_radius));
+            r_fx = 4 * (r_pedal_force(i) * pedal_efficiency * pedal_ratio * (1 - f_bias) * r_pad_cof * r_piston_area)/(r_master_cyl_area * (tire_radius / r_rotor_radius));
             %decels_actual(i) = (f_fx + r_fx + fx_r_braking(i)) / mass;
             %fprintf("second loop\n");
         end
