@@ -262,6 +262,55 @@ end
 
 fprintf("\ntotal time to decelerate from %.0f mph to 0 mph: %.4f s\n", max_speed, t(1));
 
+%% ENERGY CALCULATIONS
+
+% Energy accounting for one full braking event from max_speed to 0, using the
+% same pedal-limited deceleration profile as the time vector above.
+% Distance increment between adjacent speed grid points: dx = v_avg*dv/a_avg.
+v_fps = v * mph_to_fps;              % speed grid in ft/s
+dx = zeros(1,N);                     % ft travelled while slowing from v(i+1) to v(i)
+for i = N-1:-1:1
+    a_avg = (decels_actual(i) + decels_actual(i+1)) / 2;    % ft/s^2
+    v_avg = (v_fps(i) + v_fps(i+1)) / 2;                    % ft/s
+    if a_avg <= 0
+        dx(i) = 0;
+    else
+        dx(i) = v_avg * dv_fps / a_avg;
+    end
+end
+stopping_distance = sum(dx);         % ft
+
+% Total energy the braking system has to absorb. There is no drag term in this
+% model (aero only adds downforce), so every bit of decel comes from tire
+% longitudinal force and the total work done equals the kinetic energy at
+% max_speed. Cross-checked below against the integral of m*a dx.
+KE_total = 0.5 * mass * (max_speed * mph_to_fps)^2;                 % ft-lbf
+fx_total_actual = mass * decels_actual;                             % lbf
+E_check = sum(((fx_total_actual(1:N-1) + fx_total_actual(2:N))/2) .* dx(1:N-1));
+
+% Energy recovered by regen: integrate the usable (traction-capped) regen force
+% over the same distance. regen_force_total is speed-independent in this model,
+% so this is essentially F_regen * stopping distance.
+regen_force_used = regen_f + regen_r;                               % lbf
+E_regen = sum(((regen_force_used(1:N-1) + regen_force_used(2:N))/2) .* dx(1:N-1));
+E_friction = KE_total - E_regen;                                    % ft-lbf, into the pads/rotors
+
+ftlbf_to_J = 1.35582;
+
+fprintf("\n--- ENERGY, %.0f mph -> 0 (threshold stop) ---\n", max_speed);
+fprintf("stopping distance = %.2f ft (%.2f m), time = %.3f s\n", ...
+    stopping_distance, stopping_distance*0.3048, t(1));
+fprintf("total braking energy   = %.0f ft-lbf (%.2f kJ)\n", KE_total, KE_total*ftlbf_to_J/1000);
+fprintf("  (integral check      = %.0f ft-lbf, %.2f%% error)\n", ...
+    E_check, abs(E_check - KE_total)/KE_total*100);
+fprintf("energy into regen      = %.0f ft-lbf (%.2f kJ), %.1f%% of total\n", ...
+    E_regen, E_regen*ftlbf_to_J/1000, E_regen/KE_total*100);
+fprintf("energy into friction   = %.0f ft-lbf (%.2f kJ), %.1f%% of total\n", ...
+    E_friction, E_friction*ftlbf_to_J/1000, E_friction/KE_total*100);
+fprintf("regen force = %.1f lbf constant | peak regen power at %.0f mph = %.2f kW | avg regen power = %.2f kW\n", ...
+    regen_force_total, max_speed, regen_force_total*max_speed*mph_to_fps*ftlbf_to_J/1000, ...
+    E_regen*ftlbf_to_J/1000/t(1));
+
 %% PLOTS
 
 %%
