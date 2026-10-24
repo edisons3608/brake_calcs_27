@@ -17,7 +17,7 @@ f_rotor_radius = 3.4625;      % inches, measuring to center of rotor swept heigh
 r_rotor_radius = 3.403;     % inches, measuring to center of rotor swept height, og value was 2.955
 pedal_efficiency = 0.85;    % percentage efficiency of brake pedal [very arbitrary]
 downforce_f_dist = 0.45;    % percentage of downforce on front axle
-f_bias = 0.521;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
+f_bias = 0.581;              % percentage of driver force that goes to front axle - up to .65 in either direction. try to keep between .45 - .55.
 downforce_coef = 0.08589;   % downforce coefficient
 max_speed = 60;             % mph (not top speed of car, but fastest speed at which data is being analyzed)
 
@@ -89,8 +89,8 @@ pedal_force_delta = zeros(1,N);      % stores delta between front and rear pedal
 lowest_pedal_force = zeros(1,N);
 actual_front_brake_bias = zeros(1,N); % actual delivered front-axle share of total braking force (pedal-limited case), at different speeds
 
-a = 1.7;
-b = 0.0008;
+a = 2.3693;
+b = 0.001333;
 
 %% TRACTION-LIMITED BRAKING CASE
 
